@@ -69,7 +69,7 @@ public class MainActivity extends Activity {
         layout.setGravity(Gravity.CENTER_HORIZONTAL);
 
         TextView title = new TextView(this);
-        title.setText("Shopee Event Hunter 0.7");
+        title.setText("Shopee Event Hunter 0.8");
         title.setTextSize(23);
         title.setGravity(Gravity.CENTER);
         layout.addView(title);
@@ -172,39 +172,63 @@ public class MainActivity extends Activity {
 
     private void synchronizeShopeeTime(Button button) {
         button.setEnabled(false);
-        button.setText("SEDANG SINKRON...");
+        button.setText("SINKRON 1/5...");
         new Thread(() -> {
-            HttpURLConnection connection = null;
-            long requestStart = System.currentTimeMillis();
+            long bestOffset = 0L;
+            long bestRtt = Long.MAX_VALUE;
+            int validSamples = 0;
             try {
-                connection = (HttpURLConnection) new URL("https://shopee.co.id/").openConnection();
-                connection.setRequestMethod("GET");
-                connection.setConnectTimeout(4000);
-                connection.setReadTimeout(4000);
-                connection.setInstanceFollowRedirects(true);
-                connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 12) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36");
-                connection.setRequestProperty("Range", "bytes=0-0");
-                connection.connect();
-                long serverDate = connection.getHeaderFieldDate("Date", -1L);
-                long requestEnd = System.currentTimeMillis();
-                if (serverDate <= 0L) throw new Exception("Header waktu tidak tersedia");
-                long midpoint = requestStart + ((requestEnd - requestStart) / 2L);
-                long offset = serverDate - midpoint;
-                prefs.edit().putLong("server_offset_ms", offset).putLong("server_synced_at", requestEnd).apply();
+                for (int sample = 1; sample <= 5; sample++) {
+                    HttpURLConnection connection = null;
+                    long requestStart = System.currentTimeMillis();
+                    try {
+                        connection = (HttpURLConnection) new URL("https://shopee.co.id/").openConnection();
+                        connection.setRequestMethod("GET");
+                        connection.setConnectTimeout(4000);
+                        connection.setReadTimeout(4000);
+                        connection.setInstanceFollowRedirects(true);
+                        connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 12) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36");
+                        connection.setRequestProperty("Range", "bytes=0-0");
+                        connection.connect();
+                        long serverDate = connection.getHeaderFieldDate("Date", -1L);
+                        long requestEnd = System.currentTimeMillis();
+                        long rtt = requestEnd - requestStart;
+                        if (serverDate > 0L) {
+                            long midpoint = requestStart + (rtt / 2L);
+                            long offset = serverDate - midpoint;
+                            validSamples++;
+                            if (rtt < bestRtt) {
+                                bestRtt = rtt;
+                                bestOffset = offset;
+                            }
+                        }
+                    } finally {
+                        if (connection != null) connection.disconnect();
+                    }
+                    final int completed = sample;
+                    runOnUiThread(() -> button.setText("SINKRON " + completed + "/5..."));
+                    if (sample < 5) Thread.sleep(120L);
+                }
+                if (validSamples < 3) throw new Exception("Sampel waktu kurang dari tiga");
+                final long selectedOffset = bestOffset;
+                final long selectedRtt = bestRtt;
+                final int sampleCount = validSamples;
+                long syncedAt = System.currentTimeMillis();
+                prefs.edit().putLong("server_offset_ms", selectedOffset)
+                    .putLong("server_synced_at", syncedAt).apply();
                 runOnUiThread(() -> {
                     button.setEnabled(true);
                     button.setText("SINKRONKAN WAKTU SHOPEE");
                     refreshTimeSyncStatus();
-                    countdown.setText("Sinkronisasi selesai. Pariksa deui jadwal event.");
+                    countdown.setText("Sinkronisasi 5 kali selesai. Dipilih respons panggancangna (" +
+                        selectedRtt + " ms). Sampel valid: " + sampleCount + "/5.");
                 });
             } catch (Exception e) {
                 runOnUiThread(() -> {
                     button.setEnabled(true);
                     button.setText("SINKRONKAN WAKTU SHOPEE");
-                    timeSyncStatus.setText("Sinkronisasi gagal. Pariksa internet, tuluy cobian deui.");
+                    timeSyncStatus.setText("Sinkronisasi 5 kali gagal/kurang sampel. Pariksa internet, tuluy cobian deui.");
                 });
-            } finally {
-                if (connection != null) connection.disconnect();
             }
         }).start();
     }
