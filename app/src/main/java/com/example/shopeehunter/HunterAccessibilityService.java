@@ -16,6 +16,8 @@ public class HunterAccessibilityService extends AccessibilityService {
 
         SharedPreferences prefs = getSharedPreferences("hunter", MODE_PRIVATE);
         if (!prefs.getBoolean("armed", false)) return;
+        long startAt = prefs.getLong("start_at", 0L);
+        if (startAt <= 0L || System.currentTimeMillis() < startAt) return;
         if (SystemClock.elapsedRealtime() - lastAttempt < 1000) return;
 
         AccessibilityNodeInfo root = getRootInActiveWindow();
@@ -23,8 +25,7 @@ public class HunterAccessibilityService extends AccessibilityService {
         lastAttempt = SystemClock.elapsedRealtime();
         try {
             if (clickBuyNowOnce(root)) {
-                // Disarm immediately: no second click and no checkout/payment actions.
-                prefs.edit().putBoolean("armed", false).apply();
+                prefs.edit().putBoolean("armed", false).putLong("start_at", 0L).apply();
             }
         } finally {
             root.recycle();
@@ -33,17 +34,13 @@ public class HunterAccessibilityService extends AccessibilityService {
 
     private boolean clickBuyNowOnce(AccessibilityNodeInfo node) {
         if (node == null) return false;
-
         CharSequence text = node.getText();
         CharSequence desc = node.getContentDescription();
         String label = ((text == null ? "" : text.toString()) + " " +
                 (desc == null ? "" : desc.toString()))
                 .toLowerCase(Locale.ROOT).replaceAll("\\s+", " ").trim();
 
-        // Exact target only. Never target Checkout, Buat Pesanan, Bayar, or PIN.
-        boolean target = label.equals("beli sekarang") ||
-                         label.equals("buy now");
-
+        boolean target = label.equals("beli sekarang") || label.equals("buy now");
         if (target && node.isEnabled()) {
             AccessibilityNodeInfo clickable = node;
             boolean clicked = false;
@@ -59,7 +56,6 @@ public class HunterAccessibilityService extends AccessibilityService {
             }
             if (clicked) return true;
         }
-
         for (int i = 0; i < node.getChildCount(); i++) {
             AccessibilityNodeInfo child = node.getChild(i);
             if (child != null) {
