@@ -18,10 +18,22 @@ import android.widget.AdapterView;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Locale;
+import java.net.HttpURLConnection;
+import java.net.URL;
 
 public class MainActivity extends Activity {
     private SharedPreferences prefs;
-    private TextView status, countdown;
+    private TextView status, countdown, timeSyncStatus;
+    private static final long SYNC_VALID_MS = 10 * 60 * 1000L;
+
+    private long adjustedNow() {
+        return System.currentTimeMillis() + prefs.getLong("server_offset_ms", 0L);
+    }
+
+    private boolean hasFreshSync() {
+        long t = prefs.getLong("server_synced_at", 0L);
+        return t > 0L && System.currentTimeMillis() - t <= SYNC_VALID_MS;
+    }
     private final Handler handler = new Handler();
     private final Calendar eventTime = Calendar.getInstance();
     private final SimpleDateFormat fmt = new SimpleDateFormat("dd-MM-yyyy HH:mm:ss", new Locale("id","ID"));
@@ -32,7 +44,7 @@ public class MainActivity extends Activity {
             long target = prefs.getLong("start_at", 0L);
             boolean armed = prefs.getBoolean("armed", false);
             if (armed && target > 0) {
-                long left = target - System.currentTimeMillis();
+                long left = target - adjustedNow();
                 if (left > 0) {
                     long sec = left / 1000;
                     countdown.setText(String.format(Locale.getDefault(),
@@ -57,7 +69,7 @@ public class MainActivity extends Activity {
         layout.setGravity(Gravity.CENTER_HORIZONTAL);
 
         TextView title = new TextView(this);
-        title.setText("Shopee Event Hunter 0.5");
+        title.setText("Shopee Event Hunter 0.7");
         title.setTextSize(23);
         title.setGravity(Gravity.CENTER);
         layout.addView(title);
@@ -71,6 +83,16 @@ public class MainActivity extends Activity {
         status.setTextSize(16);
         status.setPadding(0, 18, 0, 8);
         layout.addView(status);
+
+        timeSyncStatus = new TextView(this);
+        timeSyncStatus.setTextSize(14);
+        timeSyncStatus.setPadding(0, 8, 0, 8);
+        layout.addView(timeSyncStatus);
+
+        Button sync = new Button(this);
+        sync.setText("SINKRONKAN WAKTU SHOPEE");
+        sync.setOnClickListener(v -> synchronizeShopeeTime(sync));
+        layout.addView(sync);
 
         countdown = new TextView(this);
         countdown.setTextSize(18);
@@ -107,8 +129,12 @@ public class MainActivity extends Activity {
         Button start = new Button(this);
         start.setText("MULAI COUNTDOWN");
         start.setOnClickListener(v -> {
+            if (!hasFreshSync()) {
+                countdown.setText("Sinkronkan waktu Shopee dahulu. Hasil sinkronisasi berlaku 10 menit.");
+                return;
+            }
             long target = eventTime.getTimeInMillis();
-            if (target <= System.currentTimeMillis()) {
+            if (target <= adjustedNow()) {
                 countdown.setText("Pilih waktu di masa depan terlebih dahulu.");
                 return;
             }
@@ -141,6 +167,57 @@ public class MainActivity extends Activity {
 
         setContentView(layout);
         refreshStatus();
+        refreshTimeSyncStatus();
+    }
+
+    private void synchronizeShopeeTime(Button button) {
+        button.setEnabled(false);
+        button.setText("SEDANG SINKRON...");
+        new Thread(() -> {
+            HttpURLConnection connection = null;
+            long requestStart = System.currentTimeMillis();
+            try {
+                connection = (HttpURLConnection) new URL("https://shopee.co.id/").openConnection();
+                connection.setRequestMethod("GET");
+                connection.setConnectTimeout(4000);
+                connection.setReadTimeout(4000);
+                connection.setInstanceFollowRedirects(true);
+                connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 12) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36");
+                connection.setRequestProperty("Range", "bytes=0-0");
+                connection.connect();
+                long serverDate = connection.getHeaderFieldDate("Date", -1L);
+                long requestEnd = System.currentTimeMillis();
+                if (serverDate <= 0L) throw new Exception("Header waktu tidak tersedia");
+                long midpoint = requestStart + ((requestEnd - requestStart) / 2L);
+                long offset = serverDate - midpoint;
+                prefs.edit().putLong("server_offset_ms", offset).putLong("server_synced_at", requestEnd).apply();
+                runOnUiThread(() -> {
+                    button.setEnabled(true);
+                    button.setText("SINKRONKAN WAKTU SHOPEE");
+                    refreshTimeSyncStatus();
+                    countdown.setText("Sinkronisasi selesai. Pariksa deui jadwal event.");
+                });
+            } catch (Exception e) {
+                runOnUiThread(() -> {
+                    button.setEnabled(true);
+                    button.setText("SINKRONKAN WAKTU SHOPEE");
+                    timeSyncStatus.setText("Sinkronisasi gagal. Pariksa internet, tuluy cobian deui.");
+                });
+            } finally {
+                if (connection != null) connection.disconnect();
+            }
+        }).start();
+    }
+
+    private void refreshTimeSyncStatus() {
+        if (timeSyncStatus == null || prefs == null) return;
+        if (!hasFreshSync()) {
+            timeSyncStatus.setText("Waktu can disinkronkeun atawa geus kadaluwarsa. Sinkronkeun saméméh countdown.");
+            return;
+        }
+        long seconds = Math.round(prefs.getLong("server_offset_ms", 0L) / 1000.0);
+        timeSyncStatus.setText("Waktu respons server Shopee geus sinkron. Bédana jeung jam HP kira-kira " +
+            (seconds >= 0 ? "+" : "") + seconds + " detik. Berlaku 10 menit.");
     }
 
     private void chooseDateTime() {
@@ -170,6 +247,7 @@ public class MainActivity extends Activity {
         super.onResume();
         if (prefs != null) {
             refreshStatus();
+            refreshTimeSyncStatus();
             handler.removeCallbacks(ticker);
             handler.post(ticker);
         }
