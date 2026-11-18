@@ -1,14 +1,20 @@
 package com.example.shopeehunter;
 
 import android.accessibilityservice.AccessibilityService;
+import android.accessibilityservice.GestureDescription;
+import android.content.SharedPreferences;
+import android.graphics.Path;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.SystemClock;
+import android.util.DisplayMetrics;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
-import android.os.SystemClock;
-import android.content.SharedPreferences;
 import java.util.Locale;
 
 public class HunterAccessibilityService extends AccessibilityService {
     private long lastAttempt = 0;
+    private final Handler handler = new Handler(Looper.getMainLooper());
 
     @Override public void onAccessibilityEvent(AccessibilityEvent event) {
         if (event == null || event.getPackageName() == null) return;
@@ -18,7 +24,55 @@ public class HunterAccessibilityService extends AccessibilityService {
         if (!prefs.getBoolean("armed", false)) return;
         long startAt = prefs.getLong("start_at", 0L);
         if (startAt <= 0L || System.currentTimeMillis() < startAt) return;
-        if (SystemClock.elapsedRealtime() - lastAttempt < 1000) return;
+        if (prefs.getBoolean("refresh_in_progress", false)) return;
+
+        long refreshedFor = prefs.getLong("refresh_for_start_at", 0L);
+        if (refreshedFor != startAt) {
+            // One pull-to-refresh attempt only for this countdown.
+            prefs.edit().putLong("refresh_for_start_at", startAt)
+                .putBoolean("refresh_in_progress", true).apply();
+            performSingleRefresh();
+            return;
+        }
+        scanAndClickTarget(prefs);
+    }
+
+    private void performSingleRefresh() {
+        DisplayMetrics metrics = getResources().getDisplayMetrics();
+        float x = metrics.widthPixels / 2f;
+        float startY = metrics.heightPixels * 0.20f;
+        float endY = metrics.heightPixels * 0.62f;
+
+        Path path = new Path();
+        path.moveTo(x, startY);
+        path.lineTo(x, endY);
+        GestureDescription gesture = new GestureDescription.Builder()
+            .addStroke(new GestureDescription.StrokeDescription(path, 0, 420))
+            .build();
+
+        boolean dispatched = dispatchGesture(gesture, new GestureResultCallback() {
+            @Override public void onCompleted(GestureDescription description) {
+                finishRefreshGesture();
+            }
+            @Override public void onCancelled(GestureDescription description) {
+                finishRefreshGesture();
+            }
+        }, null);
+
+        if (!dispatched) finishRefreshGesture();
+    }
+
+    private void finishRefreshGesture() {
+        SharedPreferences prefs = getSharedPreferences("hunter", MODE_PRIVATE);
+        prefs.edit().putBoolean("refresh_in_progress", false).apply();
+        // Give Shopee a moment to update the page before looking for the selected button.
+        handler.postDelayed(() -> scanAndClickTarget(prefs), 1200);
+    }
+
+    private void scanAndClickTarget(SharedPreferences prefs) {
+        if (!prefs.getBoolean("armed", false)) return;
+        if (prefs.getBoolean("refresh_in_progress", false)) return;
+        if (SystemClock.elapsedRealtime() - lastAttempt < 700) return;
 
         AccessibilityNodeInfo root = getRootInActiveWindow();
         if (root == null) return;
