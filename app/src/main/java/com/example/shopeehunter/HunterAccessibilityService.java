@@ -33,6 +33,7 @@ public class HunterAccessibilityService extends AccessibilityService {
         }
     }
 
+    // Scan all nodes exposed in the current Shopee screen; matching is not tied to screen position.
     private boolean clickSelectedTargetOnce(AccessibilityNodeInfo node, String selectedTarget) {
         if (node == null) return false;
         CharSequence text = node.getText();
@@ -43,9 +44,7 @@ public class HunterAccessibilityService extends AccessibilityService {
 
         String wanted = selectedTarget == null ? "beli sekarang" :
                 selectedTarget.toLowerCase(Locale.ROOT).trim();
-        boolean target = label.equals(wanted) ||
-                (wanted.equals("beli sekarang") && label.equals("buy now")) ||
-                (wanted.equals("beli dengan voucher") && label.equals("buy with voucher"));
+        boolean target = matchesButtonLabel(label, wanted);
         if (target && node.isEnabled()) {
             AccessibilityNodeInfo clickable = node;
             boolean clicked = false;
@@ -68,6 +67,17 @@ public class HunterAccessibilityService extends AccessibilityService {
                 child.recycle();
                 if (done) return true;
             }
+        }
+        return false;
+    }
+
+    private boolean matchesButtonLabel(String label, String wanted) {
+        if (label.equals(wanted) || label.startsWith(wanted + " ")) return true;
+        if (wanted.equals("beli sekarang")) {
+            return label.equals("buy now") || label.startsWith("buy now ");
+        }
+        if (wanted.equals("beli dengan voucher")) {
+            return label.equals("buy with voucher") || label.startsWith("buy with voucher ");
         }
         return false;
     }
