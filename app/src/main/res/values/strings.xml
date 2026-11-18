@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Shopee Event Hunter TEST</string>
+    <string name="service_description">Mode uji: satu kali menekan tombol Beli Sekarang di Shopee jika diaktifkan pengguna.</string>
+</resources>
