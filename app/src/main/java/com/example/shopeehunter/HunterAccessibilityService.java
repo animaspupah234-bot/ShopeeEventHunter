@@ -23,7 +23,8 @@ public class HunterAccessibilityService extends AccessibilityService {
         SharedPreferences prefs = getSharedPreferences("hunter", MODE_PRIVATE);
         if (!prefs.getBoolean("armed", false)) return;
         long startAt = prefs.getLong("start_at", 0L);
-        if (startAt <= 0L || System.currentTimeMillis() < startAt) return;
+        long serverOffset = prefs.getLong("server_offset_ms", 0L);
+        if (startAt <= 0L || System.currentTimeMillis() + serverOffset < startAt) return;
         if (prefs.getBoolean("refresh_in_progress", false)) return;
 
         long refreshedFor = prefs.getLong("refresh_for_start_at", 0L);
