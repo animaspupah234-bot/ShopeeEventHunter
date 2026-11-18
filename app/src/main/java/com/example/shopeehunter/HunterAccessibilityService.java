@@ -23,8 +23,9 @@ public class HunterAccessibilityService extends AccessibilityService {
         AccessibilityNodeInfo root = getRootInActiveWindow();
         if (root == null) return;
         lastAttempt = SystemClock.elapsedRealtime();
+        String selectedTarget = prefs.getString("target_button", "Beli Sekarang");
         try {
-            if (clickBuyNowOnce(root)) {
+            if (clickSelectedTargetOnce(root, selectedTarget)) {
                 prefs.edit().putBoolean("armed", false).putLong("start_at", 0L).apply();
             }
         } finally {
@@ -32,7 +33,7 @@ public class HunterAccessibilityService extends AccessibilityService {
         }
     }
 
-    private boolean clickBuyNowOnce(AccessibilityNodeInfo node) {
+    private boolean clickSelectedTargetOnce(AccessibilityNodeInfo node, String selectedTarget) {
         if (node == null) return false;
         CharSequence text = node.getText();
         CharSequence desc = node.getContentDescription();
@@ -40,7 +41,11 @@ public class HunterAccessibilityService extends AccessibilityService {
                 (desc == null ? "" : desc.toString()))
                 .toLowerCase(Locale.ROOT).replaceAll("\\s+", " ").trim();
 
-        boolean target = label.equals("beli sekarang") || label.equals("buy now");
+        String wanted = selectedTarget == null ? "beli sekarang" :
+                selectedTarget.toLowerCase(Locale.ROOT).trim();
+        boolean target = label.equals(wanted) ||
+                (wanted.equals("beli sekarang") && label.equals("buy now")) ||
+                (wanted.equals("beli dengan voucher") && label.equals("buy with voucher"));
         if (target && node.isEnabled()) {
             AccessibilityNodeInfo clickable = node;
             boolean clicked = false;
@@ -59,7 +64,7 @@ public class HunterAccessibilityService extends AccessibilityService {
         for (int i = 0; i < node.getChildCount(); i++) {
             AccessibilityNodeInfo child = node.getChild(i);
             if (child != null) {
-                boolean done = clickBuyNowOnce(child);
+                boolean done = clickSelectedTargetOnce(child, selectedTarget);
                 child.recycle();
                 if (done) return true;
             }
