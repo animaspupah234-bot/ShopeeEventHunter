@@ -12,6 +12,9 @@ import android.view.Gravity;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.Spinner;
+import android.widget.ArrayAdapter;
+import android.widget.AdapterView;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Locale;
@@ -22,6 +25,7 @@ public class MainActivity extends Activity {
     private final Handler handler = new Handler();
     private final Calendar eventTime = Calendar.getInstance();
     private final SimpleDateFormat fmt = new SimpleDateFormat("dd-MM-yyyy HH:mm:ss", new Locale("id","ID"));
+    private static final String[] TARGETS = {"Beli Sekarang", "Beli dengan Voucher"};
 
     private final Runnable ticker = new Runnable() {
         @Override public void run() {
@@ -34,7 +38,7 @@ public class MainActivity extends Activity {
                     countdown.setText(String.format(Locale.getDefault(),
                         "Hitung mundur: %02d:%02d:%02d", sec/3600, (sec%3600)/60, sec%60));
                 } else {
-                    countdown.setText("Waktu event tiba — menunggu tombol Beli Sekarang terlihat.");
+                    countdown.setText("Waktu event tiba — menunggu tombol target yang dipilih terlihat.");
                 }
             } else {
                 countdown.setText("Belum ada hitung mundur aktif.");
@@ -53,13 +57,13 @@ public class MainActivity extends Activity {
         layout.setGravity(Gravity.CENTER_HORIZONTAL);
 
         TextView title = new TextView(this);
-        title.setText("Shopee Event Hunter 0.4");
+        title.setText("Shopee Event Hunter 0.5");
         title.setTextSize(23);
         title.setGravity(Gravity.CENTER);
         layout.addView(title);
 
         TextView warning = new TextView(this);
-        warning.setText("\nMODE TESTING — SATU KALI KLIK\n\nPilih waktu event, lalu mulai hitung mundur. Pada waktunya, aplikasi hanya mencoba satu kali menekan tombol “Beli Sekarang” yang terbaca di Shopee. Setelah berhasil, otomatis STOP.\n\nTidak melakukan checkout, Buat Pesanan, pembayaran, atau PIN. Shopee dapat membuka halaman checkout setelah tombol Beli Sekarang ditekan. Gunakan produk uji yang tidak akan dibeli.");
+        warning.setText("\nMODE TESTING — SATU KALI KLIK\n\nPilih tombol target secara manual, lalu atur waktu event. Pada waktunya, aplikasi hanya mencoba satu kali menekan tombol target yang dipilih di Shopee. Setelah berhasil, otomatis STOP.\n\nTidak melakukan checkout lanjutan, Buat Pesanan, pembayaran, atau PIN. Tombol Beli dengan Voucher dapat membawa ke halaman pembelian. Gunakan produk uji yang tidak akan dibeli.");
         warning.setTextSize(14);
         layout.addView(warning);
 
@@ -70,8 +74,30 @@ public class MainActivity extends Activity {
 
         countdown = new TextView(this);
         countdown.setTextSize(18);
-        countdown.setPadding(0, 8, 0, 16);
+        countdown.setPadding(0, 8, 0, 10);
         layout.addView(countdown);
+
+        TextView targetLabel = new TextView(this);
+        targetLabel.setText("Pilih tombol yang akan dideteksi:");
+        targetLabel.setTextSize(16);
+        targetLabel.setPadding(0, 8, 0, 4);
+        layout.addView(targetLabel);
+
+        Spinner targetSpinner = new Spinner(this);
+        ArrayAdapter<String> targetAdapter = new ArrayAdapter<>(this,
+            android.R.layout.simple_spinner_item, TARGETS);
+        targetAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        targetSpinner.setAdapter(targetAdapter);
+        String savedTarget = prefs.getString("target_button", TARGETS[0]);
+        targetSpinner.setSelection(savedTarget.equals(TARGETS[1]) ? 1 : 0);
+        targetSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(AdapterView<?> parent, android.view.View view, int position, long id) {
+                prefs.edit().putString("target_button", TARGETS[position]).apply();
+                refreshStatus();
+            }
+            @Override public void onNothingSelected(AdapterView<?> parent) { }
+        });
+        layout.addView(targetSpinner);
 
         Button choose = new Button(this);
         choose.setText("PILIH WAKTU EVENT");
@@ -133,9 +159,10 @@ public class MainActivity extends Activity {
 
     private void refreshStatus() {
         if (status != null && prefs != null) {
+            String target = prefs.getString("target_button", TARGETS[0]);
             status.setText(prefs.getBoolean("armed", false)
-                ? "Status: COUNTDOWN AKTIF — satu kali klik setelah waktunya."
-                : "Status: NONAKTIF — tidak ada klik otomatis.");
+                ? "Status: COUNTDOWN AKTIF — target: " + target + " (maksimal satu klik)."
+                : "Status: NONAKTIF — target dipilih: " + target + ".");
         }
     }
 
