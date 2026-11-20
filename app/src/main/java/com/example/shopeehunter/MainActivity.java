@@ -70,7 +70,7 @@ public class MainActivity extends Activity {
         layout.setGravity(Gravity.CENTER_HORIZONTAL);
 
         TextView title = new TextView(this);
-        title.setText("Shopee Event Hunter 1.0");
+        title.setText("Shopee Event Hunter 1.1");
         title.setTextSize(23);
         title.setGravity(Gravity.CENTER);
         layout.addView(title);
