@@ -8,7 +8,7 @@ android {
         applicationId 'com.example.shopeehunter.v04'
         minSdk 23
         targetSdk 32
-        versionCode 9
-        versionName '0.9-test'
+        versionCode 10
+        versionName '1.0-test'
     }
 }
