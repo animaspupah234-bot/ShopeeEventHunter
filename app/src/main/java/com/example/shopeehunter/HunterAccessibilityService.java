@@ -14,7 +14,17 @@ import java.util.Locale;
 
 public class HunterAccessibilityService extends AccessibilityService {
     private long lastAttempt = 0;
+    private long scanWindowEnd = 0L;
     private final Handler handler = new Handler(Looper.getMainLooper());
+    private final Runnable fastScanLoop = new Runnable() {
+        @Override public void run() {
+            SharedPreferences prefs = getSharedPreferences("hunter", MODE_PRIVATE);
+            if (!prefs.getBoolean("armed", false)) return;
+            if (SystemClock.elapsedRealtime() > scanWindowEnd) return;
+            scanAndClickTarget(prefs);
+            if (prefs.getBoolean("armed", false)) handler.postDelayed(this, 150);
+        }
+    };
 
     @Override public void onAccessibilityEvent(AccessibilityEvent event) {
         if (event == null || event.getPackageName() == null) return;
@@ -66,14 +76,16 @@ public class HunterAccessibilityService extends AccessibilityService {
     private void finishRefreshGesture() {
         SharedPreferences prefs = getSharedPreferences("hunter", MODE_PRIVATE);
         prefs.edit().putBoolean("refresh_in_progress", false).apply();
-        // Give Shopee a moment to update the page before looking for the selected button.
-        handler.postDelayed(() -> scanAndClickTarget(prefs), 1200);
+        // Start a short, repeated scan window after one refresh; never refresh again.
+        scanWindowEnd = SystemClock.elapsedRealtime() + 5000L;
+        handler.removeCallbacks(fastScanLoop);
+        handler.postDelayed(fastScanLoop, 250L);
     }
 
     private void scanAndClickTarget(SharedPreferences prefs) {
         if (!prefs.getBoolean("armed", false)) return;
         if (prefs.getBoolean("refresh_in_progress", false)) return;
-        if (SystemClock.elapsedRealtime() - lastAttempt < 700) return;
+        if (SystemClock.elapsedRealtime() - lastAttempt < 120) return;
 
         AccessibilityNodeInfo root = getRootInActiveWindow();
         if (root == null) return;
