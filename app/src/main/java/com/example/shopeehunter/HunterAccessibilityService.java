@@ -41,7 +41,9 @@ public class HunterAccessibilityService extends AccessibilityService {
         if (refreshedFor != startAt) {
             // One pull-to-refresh attempt only for this countdown.
             prefs.edit().putLong("refresh_for_start_at", startAt)
-                .putBoolean("refresh_in_progress", true).apply();
+                .putBoolean("refresh_in_progress", true)
+                .putInt("scan_attempts", 0)
+                .putLong("last_click_latency_ms", -1L).apply();
             performSingleRefresh();
             return;
         }
@@ -75,7 +77,8 @@ public class HunterAccessibilityService extends AccessibilityService {
 
     private void finishRefreshGesture() {
         SharedPreferences prefs = getSharedPreferences("hunter", MODE_PRIVATE);
-        prefs.edit().putBoolean("refresh_in_progress", false).apply();
+        prefs.edit().putBoolean("refresh_in_progress", false)
+            .putLong("last_refresh_completed_at", System.currentTimeMillis()).apply();
         // Start a short, repeated scan window after one refresh; never refresh again.
         scanWindowEnd = SystemClock.elapsedRealtime() + 5000L;
         handler.removeCallbacks(fastScanLoop);
@@ -90,10 +93,18 @@ public class HunterAccessibilityService extends AccessibilityService {
         AccessibilityNodeInfo root = getRootInActiveWindow();
         if (root == null) return;
         lastAttempt = SystemClock.elapsedRealtime();
+        int attempts = prefs.getInt("scan_attempts", 0) + 1;
+        prefs.edit().putInt("scan_attempts", attempts).apply();
         String selectedTarget = prefs.getString("target_button", "Beli Sekarang");
         try {
             if (clickSelectedTargetOnce(root, selectedTarget)) {
-                prefs.edit().putBoolean("armed", false).putLong("start_at", 0L).apply();
+                long clickedAt = System.currentTimeMillis();
+                long refreshedAt = prefs.getLong("last_refresh_completed_at", 0L);
+                long latency = refreshedAt > 0L ? clickedAt - refreshedAt : -1L;
+                prefs.edit().putLong("last_click_latency_ms", latency)
+                    .putInt("last_successful_scan_attempts", attempts)
+                    .putLong("last_click_at", clickedAt)
+                    .putBoolean("armed", false).putLong("start_at", 0L).apply();
             }
         } finally {
             root.recycle();
