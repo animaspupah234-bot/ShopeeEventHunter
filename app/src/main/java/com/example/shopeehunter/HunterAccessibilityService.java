@@ -80,8 +80,15 @@ public class HunterAccessibilityService extends AccessibilityService {
 
         scheduledStartAt = 0L;
         handler.removeCallbacks(eventStartRunnable);
+        // Record the actual refresh start against the selected event time.
+        long actualStart = System.currentTimeMillis();
+        long adjustedStart = actualStart + prefs.getLong("server_offset_ms", 0L);
+        long startDelay = adjustedStart - target;
         // One pull-to-refresh attempt only for this countdown.
         prefs.edit().putLong("refresh_for_start_at", target)
+            .putLong("last_refresh_target_at", target)
+            .putLong("last_refresh_started_at", actualStart)
+            .putLong("last_refresh_start_delay_ms", startDelay)
             .putBoolean("refresh_in_progress", true)
             .putInt("scan_attempts", 0)
             .putLong("last_click_latency_ms", -1L).apply();
