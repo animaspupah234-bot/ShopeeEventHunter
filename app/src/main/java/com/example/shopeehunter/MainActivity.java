@@ -144,7 +144,14 @@ public class MainActivity extends Activity {
                 countdown.setText("Pilih waktu di masa depan terlebih dahulu.");
                 return;
             }
-            prefs.edit().putLong("start_at", target).putBoolean("armed", true).apply();
+            prefs.edit().putLong("start_at", target).putBoolean("armed", true)
+                .putLong("last_refresh_target_at", 0L)
+                .putLong("last_refresh_started_at", 0L)
+                .putLong("last_refresh_start_delay_ms", Long.MIN_VALUE)
+                .putLong("last_refresh_completed_at", 0L)
+                .putLong("last_click_latency_ms", -1L)
+                .putInt("scan_attempts", 0)
+                .apply();
             refreshStatus();
         });
         layout.addView(start);
@@ -248,9 +255,19 @@ public class MainActivity extends Activity {
             diagnosticsStatus.setText("Diagnostik: can aya data uji.");
             return;
         }
+        long refreshDelay = prefs.getLong("last_refresh_start_delay_ms", Long.MIN_VALUE);
+        long targetAt = prefs.getLong("last_refresh_target_at", 0L);
+        long startedAt = prefs.getLong("last_refresh_started_at", 0L);
         String result = "Diagnostik uji terakhir:\nJumlah scan: " + attempts;
+        if (targetAt > 0L && startedAt > 0L && refreshDelay != Long.MIN_VALUE) {
+            result += "\nCountdown béak: " + fmt.format(new java.util.Date(targetAt));
+            result += "\nRefresh mimiti: " + fmt.format(new java.util.Date(startedAt));
+            result += "\nTelat/ngamimitian refresh: " + refreshDelay + " ms";
+        } else {
+            result += "\nWaktu mimiti refresh can aya data.";
+        }
         if (latency >= 0L) {
-            result += "\nWaktu ti refresh réngsé nepi ka klik hasil: " + latency + " ms";
+            result += "\nWaktu refresh réngsé nepi ka klik hasil: " + latency + " ms";
         } else {
             result += "\nTombol can hasil diklik dina uji ieu.";
         }
