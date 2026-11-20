@@ -23,7 +23,7 @@ import java.net.URL;
 
 public class MainActivity extends Activity {
     private SharedPreferences prefs;
-    private TextView status, countdown, timeSyncStatus;
+    private TextView status, countdown, timeSyncStatus, diagnosticsStatus;
     private static final long SYNC_VALID_MS = 10 * 60 * 1000L;
 
     private long adjustedNow() {
@@ -56,6 +56,7 @@ public class MainActivity extends Activity {
                 countdown.setText("Belum ada hitung mundur aktif.");
             }
             refreshStatus();
+            refreshDiagnostics();
             handler.postDelayed(this, 500);
         }
     };
@@ -69,7 +70,7 @@ public class MainActivity extends Activity {
         layout.setGravity(Gravity.CENTER_HORIZONTAL);
 
         TextView title = new TextView(this);
-        title.setText("Shopee Event Hunter 0.8");
+        title.setText("Shopee Event Hunter 1.0");
         title.setTextSize(23);
         title.setGravity(Gravity.CENTER);
         layout.addView(title);
@@ -88,6 +89,11 @@ public class MainActivity extends Activity {
         timeSyncStatus.setTextSize(14);
         timeSyncStatus.setPadding(0, 8, 0, 8);
         layout.addView(timeSyncStatus);
+
+        diagnosticsStatus = new TextView(this);
+        diagnosticsStatus.setTextSize(13);
+        diagnosticsStatus.setPadding(0, 4, 0, 10);
+        layout.addView(diagnosticsStatus);
 
         Button sync = new Button(this);
         sync.setText("SINKRONKAN WAKTU SHOPEE");
@@ -233,6 +239,24 @@ public class MainActivity extends Activity {
         }).start();
     }
 
+    private void refreshDiagnostics() {
+        if (diagnosticsStatus == null || prefs == null) return;
+        long refreshedAt = prefs.getLong("last_refresh_completed_at", 0L);
+        int attempts = prefs.getInt("scan_attempts", 0);
+        long latency = prefs.getLong("last_click_latency_ms", -1L);
+        if (refreshedAt <= 0L) {
+            diagnosticsStatus.setText("Diagnostik: can aya data uji.");
+            return;
+        }
+        String result = "Diagnostik uji terakhir:\nJumlah scan: " + attempts;
+        if (latency >= 0L) {
+            result += "\nWaktu ti refresh réngsé nepi ka klik hasil: " + latency + " ms";
+        } else {
+            result += "\nTombol can hasil diklik dina uji ieu.";
+        }
+        diagnosticsStatus.setText(result);
+    }
+
     private void refreshTimeSyncStatus() {
         if (timeSyncStatus == null || prefs == null) return;
         if (!hasFreshSync()) {
@@ -272,6 +296,7 @@ public class MainActivity extends Activity {
         if (prefs != null) {
             refreshStatus();
             refreshTimeSyncStatus();
+            refreshDiagnostics();
             handler.removeCallbacks(ticker);
             handler.post(ticker);
         }
