@@ -15,7 +15,45 @@ import java.util.Locale;
 public class HunterAccessibilityService extends AccessibilityService {
     private long lastAttempt = 0;
     private long scanWindowEnd = 0L;
+    private long scheduledStartAt = 0L;
     private final Handler handler = new Handler(Looper.getMainLooper());
+
+    // This timer runs in the AccessibilityService, so it continues while Shopee is foreground.
+    private final Runnable eventStartRunnable = new Runnable() {
+        @Override public void run() {
+            SharedPreferences prefs = getSharedPreferences("hunter", MODE_PRIVATE);
+            long target = prefs.getLong("start_at", 0L);
+            if (!prefs.getBoolean("armed", false) || target <= 0L) {
+                scheduledStartAt = 0L;
+                return;
+            }
+            if (target != scheduledStartAt) {
+                scheduleEventStart(prefs, target);
+                return;
+            }
+
+            long now = System.currentTimeMillis() + prefs.getLong("server_offset_ms", 0L);
+            long remaining = target - now;
+            if (remaining > 0L) {
+                handler.postDelayed(this, Math.min(remaining, 1000L));
+                return;
+            }
+
+            AccessibilityNodeInfo root = getRootInActiveWindow();
+            boolean shopeeIsForeground = root != null &&
+                "com.shopee.id".contentEquals(root.getPackageName());
+            if (root != null) root.recycle();
+
+            // If Shopee is not currently visible, wait for its next accessibility event.
+            // That event will immediately retry because the target time has already arrived.
+            if (!shopeeIsForeground) {
+                scheduledStartAt = 0L;
+                return;
+            }
+            startRefreshOnce(prefs, target);
+        }
+    };
+
     private final Runnable fastScanLoop = new Runnable() {
         @Override public void run() {
             SharedPreferences prefs = getSharedPreferences("hunter", MODE_PRIVATE);
@@ -26,6 +64,30 @@ public class HunterAccessibilityService extends AccessibilityService {
         }
     };
 
+    private void scheduleEventStart(SharedPreferences prefs, long target) {
+        if (scheduledStartAt == target) return;
+        handler.removeCallbacks(eventStartRunnable);
+        scheduledStartAt = target;
+        long now = System.currentTimeMillis() + prefs.getLong("server_offset_ms", 0L);
+        handler.postDelayed(eventStartRunnable, Math.max(0L, target - now));
+    }
+
+    private void startRefreshOnce(SharedPreferences prefs, long target) {
+        if (!prefs.getBoolean("armed", false)) return;
+        if (prefs.getLong("start_at", 0L) != target) return;
+        if (prefs.getBoolean("refresh_in_progress", false)) return;
+        if (prefs.getLong("refresh_for_start_at", 0L) == target) return;
+
+        scheduledStartAt = 0L;
+        handler.removeCallbacks(eventStartRunnable);
+        // One pull-to-refresh attempt only for this countdown.
+        prefs.edit().putLong("refresh_for_start_at", target)
+            .putBoolean("refresh_in_progress", true)
+            .putInt("scan_attempts", 0)
+            .putLong("last_click_latency_ms", -1L).apply();
+        performSingleRefresh();
+    }
+
     @Override public void onAccessibilityEvent(AccessibilityEvent event) {
         if (event == null || event.getPackageName() == null) return;
         if (!"com.shopee.id".contentEquals(event.getPackageName())) return;
@@ -33,21 +95,24 @@ public class HunterAccessibilityService extends AccessibilityService {
         SharedPreferences prefs = getSharedPreferences("hunter", MODE_PRIVATE);
         if (!prefs.getBoolean("armed", false)) return;
         long startAt = prefs.getLong("start_at", 0L);
-        long serverOffset = prefs.getLong("server_offset_ms", 0L);
-        if (startAt <= 0L || System.currentTimeMillis() + serverOffset < startAt) return;
+        if (startAt <= 0L) return;
         if (prefs.getBoolean("refresh_in_progress", false)) return;
 
         long refreshedFor = prefs.getLong("refresh_for_start_at", 0L);
-        if (refreshedFor != startAt) {
-            // One pull-to-refresh attempt only for this countdown.
-            prefs.edit().putLong("refresh_for_start_at", startAt)
-                .putBoolean("refresh_in_progress", true)
-                .putInt("scan_attempts", 0)
-                .putLong("last_click_latency_ms", -1L).apply();
-            performSingleRefresh();
+        if (refreshedFor == startAt) {
+            scanAndClickTarget(prefs);
             return;
         }
-        scanAndClickTarget(prefs);
+
+        long now = System.currentTimeMillis() + prefs.getLong("server_offset_ms", 0L);
+        if (now < startAt) {
+            // Schedule the exact event time instead of waiting for another accessibility event.
+            scheduleEventStart(prefs, startAt);
+            return;
+        }
+
+        // If the event is already due when Shopee reports an accessibility event, start now.
+        startRefreshOnce(prefs, startAt);
     }
 
     private void performSingleRefresh() {
