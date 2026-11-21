@@ -181,6 +181,8 @@ public class MainActivity extends Activity {
                 .putLong("last_refresh_completed_at", 0L)
                 .putLong("last_click_latency_ms", -1L)
                 .putInt("scan_attempts", 0)
+                .putBoolean("waiting_second_button", false)
+                .putBoolean("second_button_found", false)
                 .apply();
             refreshStatus();
         });
@@ -189,7 +191,9 @@ public class MainActivity extends Activity {
         Button stop = new Button(this);
         stop.setText("MATIKAN / STOP");
         stop.setOnClickListener(v -> {
-            prefs.edit().putBoolean("armed", false).putLong("start_at", 0L).apply();
+            prefs.edit().putBoolean("armed", false).putLong("start_at", 0L)
+                .putBoolean("waiting_second_button", false)
+                .putBoolean("second_button_found", false).apply();
             refreshStatus();
         });
         layout.addView(stop);
@@ -356,9 +360,15 @@ public class MainActivity extends Activity {
     private void refreshStatus() {
         if (status != null && prefs != null) {
             String target = prefs.getString("target_button", TARGETS[0]);
-            status.setText(prefs.getBoolean("armed", false)
-                ? "Status: COUNTDOWN AKTIF — target: " + target + " (maksimal satu klik)."
-                : "Status: NONAKTIF — target dipilih: " + target + ".");
+            if (prefs.getBoolean("second_button_found", false)) {
+                status.setText("Status: Beli Sekarang kapanggih. Hunter eureun — teu diklik.");
+            } else if (prefs.getBoolean("waiting_second_button", false)) {
+                status.setText("Status: klik Voucher hasil. Néangan Beli Sekarang — deteksi wungkul.");
+            } else {
+                status.setText(prefs.getBoolean("armed", false)
+                    ? "Status: COUNTDOWN AKTIF — target: " + target + " (maksimal hiji klik)."
+                    : "Status: NONAKTIF — target dipilih: " + target + ".");
+            }
         }
     }
 
