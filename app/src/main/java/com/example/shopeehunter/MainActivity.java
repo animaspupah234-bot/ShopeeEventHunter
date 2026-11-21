@@ -1,6 +1,8 @@
 package com.example.shopeehunter;
 
 import android.app.Activity;
+import android.graphics.Color;
+import android.graphics.drawable.GradientDrawable;
 import android.app.DatePickerDialog;
 import android.app.TimePickerDialog;
 import android.os.Bundle;
@@ -69,31 +71,52 @@ public class MainActivity extends Activity {
         layout.setOrientation(LinearLayout.VERTICAL);
         layout.setPadding(28, 36, 28, 24);
         layout.setGravity(Gravity.CENTER_HORIZONTAL);
+        layout.setBackgroundColor(Color.rgb(247, 248, 250));
 
         TextView title = new TextView(this);
-        title.setText("Shopee Event Hunter 1.1");
-        title.setTextSize(23);
+        title.setText("Shopee Event Hunter");
+        title.setTextSize(25);
+        title.setTextColor(Color.rgb(238, 91, 35));
+        title.setTypeface(null, android.graphics.Typeface.BOLD);
         title.setGravity(Gravity.CENTER);
+        title.setPadding(0, 4, 0, 2);
         layout.addView(title);
+        TextView subtitle = new TextView(this);
+        subtitle.setText("Pengatur waktu event & satu kali klik target");
+        subtitle.setTextSize(13);
+        subtitle.setTextColor(Color.DKGRAY);
+        subtitle.setGravity(Gravity.CENTER);
+        subtitle.setPadding(0, 0, 0, 18);
+        layout.addView(subtitle);
 
         TextView warning = new TextView(this);
         warning.setText("\nMODE TESTING — SATU KALI KLIK\n\nPilih tombol target secara manual, lalu atur waktu event. Pada waktunya, aplikasi hanya mencoba satu kali menekan tombol target yang dipilih di Shopee. Setelah berhasil, otomatis STOP.\n\nTidak melakukan checkout lanjutan, Buat Pesanan, pembayaran, atau PIN. Tombol Beli dengan Voucher dapat membawa ke halaman pembelian. Gunakan produk uji yang tidak akan dibeli.");
         warning.setTextSize(14);
+        warning.setTextColor(Color.rgb(120, 75, 20));
+        stylePanel(warning, Color.rgb(255, 244, 224));
         layout.addView(warning);
+
+        addSectionLabel(layout, "1. SINKRONISASI WAKTU");
 
         status = new TextView(this);
         status.setTextSize(16);
-        status.setPadding(0, 18, 0, 8);
+        status.setPadding(14, 14, 14, 14);
+        status.setTextColor(Color.rgb(35, 90, 55));
+        stylePanel(status, Color.rgb(230, 246, 236));
         layout.addView(status);
 
         timeSyncStatus = new TextView(this);
         timeSyncStatus.setTextSize(14);
-        timeSyncStatus.setPadding(0, 8, 0, 8);
+        timeSyncStatus.setPadding(12, 10, 12, 10);
+        timeSyncStatus.setTextColor(Color.DKGRAY);
+        stylePanel(timeSyncStatus, Color.WHITE);
         layout.addView(timeSyncStatus);
 
         diagnosticsStatus = new TextView(this);
         diagnosticsStatus.setTextSize(13);
-        diagnosticsStatus.setPadding(0, 4, 0, 10);
+        diagnosticsStatus.setPadding(12, 10, 12, 10);
+        diagnosticsStatus.setTextColor(Color.DKGRAY);
+        stylePanel(diagnosticsStatus, Color.WHITE);
         layout.addView(diagnosticsStatus);
 
         Button sync = new Button(this);
@@ -101,9 +124,13 @@ public class MainActivity extends Activity {
         sync.setOnClickListener(v -> synchronizeShopeeTime(sync));
         layout.addView(sync);
 
+        addSectionLabel(layout, "2. PILIH TOMBOL TARGET");
+
         countdown = new TextView(this);
         countdown.setTextSize(18);
-        countdown.setPadding(0, 8, 0, 10);
+        countdown.setPadding(14, 14, 14, 14);
+        countdown.setTextColor(Color.rgb(45, 65, 95));
+        stylePanel(countdown, Color.rgb(235, 242, 255));
         layout.addView(countdown);
 
         TextView targetLabel = new TextView(this);
@@ -127,6 +154,8 @@ public class MainActivity extends Activity {
             @Override public void onNothingSelected(AdapterView<?> parent) { }
         });
         layout.addView(targetSpinner);
+
+        addSectionLabel(layout, "3. ATUR WAKTU & JALANKAN EVENT");
 
         Button choose = new Button(this);
         choose.setText("PILIH WAKTU EVENT");
@@ -165,6 +194,8 @@ public class MainActivity extends Activity {
         });
         layout.addView(stop);
 
+        addSectionLabel(layout, "4. PENGATURAN APLIKASI");
+
         Button accessibility = new Button(this);
         accessibility.setText("PENGATURAN AKSESIBILITAS");
         accessibility.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
@@ -186,6 +217,24 @@ public class MainActivity extends Activity {
         setContentView(scrollView);
         refreshStatus();
         refreshTimeSyncStatus();
+    }
+
+    private void addSectionLabel(LinearLayout parent, String text) {
+        TextView label = new TextView(this);
+        label.setText(text);
+        label.setTextSize(14);
+        label.setTextColor(Color.rgb(75, 80, 90));
+        label.setTypeface(null, android.graphics.Typeface.BOLD);
+        label.setPadding(2, 18, 2, 7);
+        parent.addView(label);
+    }
+
+    private void stylePanel(TextView view, int color) {
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(color);
+        bg.setCornerRadius(18f);
+        bg.setStroke(1, Color.rgb(225, 228, 233));
+        view.setBackground(bg);
     }
 
     private void synchronizeShopeeTime(Button button) {
