@@ -11,6 +11,7 @@ import android.provider.Settings;
 import android.view.Gravity;
 import android.widget.Button;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Spinner;
 import android.widget.ArrayAdapter;
@@ -178,7 +179,11 @@ public class MainActivity extends Activity {
         });
         layout.addView(shopee);
 
-        setContentView(layout);
+        ScrollView scrollView = new ScrollView(this);
+        scrollView.setFillViewport(true);
+        scrollView.setVerticalScrollBarEnabled(true);
+        scrollView.addView(layout);
+        setContentView(scrollView);
         refreshStatus();
         refreshTimeSyncStatus();
     }
