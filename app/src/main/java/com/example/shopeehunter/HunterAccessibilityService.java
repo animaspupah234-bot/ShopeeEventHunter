@@ -8,6 +8,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.util.DisplayMetrics;
+import android.widget.Toast;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 import java.util.Locale;
@@ -57,10 +58,22 @@ public class HunterAccessibilityService extends AccessibilityService {
     private final Runnable fastScanLoop = new Runnable() {
         @Override public void run() {
             SharedPreferences prefs = getSharedPreferences("hunter", MODE_PRIVATE);
-            if (!prefs.getBoolean("armed", false)) return;
-            if (SystemClock.elapsedRealtime() > scanWindowEnd) return;
-            scanAndClickTarget(prefs);
-            if (prefs.getBoolean("armed", false)) handler.postDelayed(this, 150);
+            boolean armed = prefs.getBoolean("armed", false);
+            boolean waitingSecond = prefs.getBoolean("waiting_second_button", false);
+            if (!armed && !waitingSecond) return;
+            if (SystemClock.elapsedRealtime() > scanWindowEnd) {
+                if (waitingSecond) {
+                    prefs.edit().putBoolean("waiting_second_button", false)
+                        .putBoolean("second_button_found", false).apply();
+                    Toast.makeText(HunterAccessibilityService.this,
+                        "Beli Sekarang teu kapanggih dina waktos scan.", Toast.LENGTH_LONG).show();
+                }
+                return;
+            }
+            if (waitingSecond) scanForSecondButton(prefs);
+            else scanAndClickTarget(prefs);
+            if (prefs.getBoolean("armed", false) ||
+                prefs.getBoolean("waiting_second_button", false)) handler.postDelayed(this, 100);
         }
     };
 
@@ -100,6 +113,10 @@ public class HunterAccessibilityService extends AccessibilityService {
         if (!"com.shopee.id".contentEquals(event.getPackageName())) return;
 
         SharedPreferences prefs = getSharedPreferences("hunter", MODE_PRIVATE);
+        if (prefs.getBoolean("waiting_second_button", false)) {
+            scanForSecondButton(prefs);
+            return;
+        }
         if (!prefs.getBoolean("armed", false)) return;
         long startAt = prefs.getLong("start_at", 0L);
         if (startAt <= 0L) return;
@@ -158,9 +175,13 @@ public class HunterAccessibilityService extends AccessibilityService {
     }
 
     private void scanAndClickTarget(SharedPreferences prefs) {
+        if (prefs.getBoolean("waiting_second_button", false)) {
+            scanForSecondButton(prefs);
+            return;
+        }
         if (!prefs.getBoolean("armed", false)) return;
         if (prefs.getBoolean("refresh_in_progress", false)) return;
-        if (SystemClock.elapsedRealtime() - lastAttempt < 120) return;
+        if (SystemClock.elapsedRealtime() - lastAttempt < 80) return;
 
         AccessibilityNodeInfo root = getRootInActiveWindow();
         if (root == null) return;
@@ -177,10 +198,54 @@ public class HunterAccessibilityService extends AccessibilityService {
                     .putInt("last_successful_scan_attempts", attempts)
                     .putLong("last_click_at", clickedAt)
                     .putBoolean("armed", false).putLong("start_at", 0L).apply();
+                if ("Beli dengan Voucher".equalsIgnoreCase(selectedTarget)) {
+                    prefs.edit().putBoolean("waiting_second_button", true)
+                        .putBoolean("second_button_found", false).apply();
+                    scanWindowEnd = SystemClock.elapsedRealtime() + 12000L;
+                    handler.removeCallbacks(fastScanLoop);
+                    handler.post(fastScanLoop);
+                }
             }
         } finally {
             root.recycle();
         }
+    }
+
+    // Second stage is detection-only: never click Beli Sekarang.
+    private void scanForSecondButton(SharedPreferences prefs) {
+        if (!prefs.getBoolean("waiting_second_button", false)) return;
+        AccessibilityNodeInfo root = getRootInActiveWindow();
+        if (root == null) return;
+        try {
+            if (containsButtonLabel(root, "beli sekarang")) {
+                prefs.edit().putBoolean("waiting_second_button", false)
+                    .putBoolean("second_button_found", true)
+                    .putLong("second_button_found_at", System.currentTimeMillis()).apply();
+                handler.removeCallbacks(fastScanLoop);
+                Toast.makeText(this, "Tombol Beli Sekarang kapanggih. Hunter eureun; teu diklik.", Toast.LENGTH_LONG).show();
+            }
+        } finally {
+            root.recycle();
+        }
+    }
+
+    private boolean containsButtonLabel(AccessibilityNodeInfo node, String wanted) {
+        if (node == null) return false;
+        CharSequence text = node.getText();
+        CharSequence desc = node.getContentDescription();
+        String label = ((text == null ? "" : text.toString()) + " " +
+                (desc == null ? "" : desc.toString()))
+                .toLowerCase(Locale.ROOT).replaceAll("\\s+", " ").trim();
+        if (matchesButtonLabel(label, wanted)) return true;
+        for (int i = 0; i < node.getChildCount(); i++) {
+            AccessibilityNodeInfo child = node.getChild(i);
+            if (child != null) {
+                boolean found = containsButtonLabel(child, wanted);
+                child.recycle();
+                if (found) return true;
+            }
+        }
+        return false;
     }
 
     // Scan all nodes exposed in the current Shopee screen; matching is not tied to screen position.
